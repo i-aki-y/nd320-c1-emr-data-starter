@@ -12,6 +12,9 @@ def reduce_dimension_ndc(df, ndc_df):
     return:
         df: pandas dataframe, output dataframe with joined generic drug name
     '''
+    ndc_df = ndc_df[["NDC_Code", "Non-proprietary Name"]]
+    ndc_df.columns = ["ndc_code", "generic_drug_name"]
+    df = df.merge(ndc_df, on="ndc_code", how="left")
     return df
 
 #Question 4
@@ -21,6 +24,8 @@ def select_first_encounter(df):
     return:
         - first_encounter_df: pandas dataframe, dataframe with only the first encounter for a given patient
     '''
+
+    first_encounter_df = df.groupby(["patient_nbr"]).first().reset_index()
     return first_encounter_df
 
 
@@ -35,6 +40,21 @@ def patient_dataset_splitter(df, patient_key='patient_nbr'):
      - validation: pandas dataframe,
      - test: pandas dataframe,
     '''
+    keys = df[patient_key].values
+    np.random.seed(seed=13) # for reproduciblity
+    keys = np.random.permutation(keys)
+    
+    n = len(keys)
+    n_train = int(0.6*n)
+    n_validation = int(0.2*n)
+
+    keys_train = keys[:n_train]
+    keys_validation = keys[n_train:n_train+n_validation]
+    keys_test = keys[n_train+n_validation:]
+
+    train = df[df[patient_key].isin(keys_train)]
+    validation = df[df[patient_key].isin(keys_validation)]
+    test = df[df[patient_key].isin(keys_test)]
     return train, validation, test
 
 #Question 7
@@ -56,6 +76,10 @@ def create_tf_categorical_feature_cols(categorical_col_list,
         tf_categorical_feature_column = tf.feature_column.......
 
         '''
+        categorical_column = tf.feature_column.categorical_column_with_vocabulary_file(c, vocab_file_path)
+        tf_categorical_feature_column = tf.feature_column.indicator_column(
+            categorical_column
+        )
         output_tf_list.append(tf_categorical_feature_column)
     return output_tf_list
 
@@ -64,6 +88,8 @@ def normalize_numeric_with_zscore(col, mean, std):
     '''
     This function can be used in conjunction with the tf feature column for normalization
     '''
+
+    col = tf.cast(col, tf.float32)
     return (col - mean)/std
 
 
@@ -78,6 +104,8 @@ def create_tf_numeric_feature(col, MEAN, STD, default_value=0):
     return:
         tf_numeric_feature: tf feature column representation of the input field
     '''
+    tf_numeric_feature = tf.feature_column.numeric_column(col, default_value=default_value, 
+                                                          normalizer_fn=lambda x: normalize_numeric_with_zscore(x, MEAN, STD))
     return tf_numeric_feature
 
 #Question 9
@@ -85,8 +113,8 @@ def get_mean_std_from_preds(diabetes_yhat):
     '''
     diabetes_yhat: TF Probability prediction object
     '''
-    m = '?'
-    s = '?'
+    m = diabetes_yhat.mean()
+    s = diabetes_yhat.stddev()
     return m, s
 
 # Question 10
@@ -97,4 +125,6 @@ def get_student_binary_prediction(df, col):
     return:
         student_binary_prediction: pandas dataframe converting input to flattened numpy array and binary labels
     '''
+    threshold = 5 # include the data if the prediction is more than 3 days
+    student_binary_prediction = np.where(df[col] > threshold, 1, 0)
     return student_binary_prediction
